@@ -1,32 +1,41 @@
 package com.jsmatos.timesheets;
 
+import com.jsmatos.timesheets.gui.Alert;
 import com.jsmatos.timesheets.gui.Screen;
 import com.jsmatos.timesheets.handlers.LogPersist;
-import com.jsmatos.timesheets.model.RegistrationHandler;
-import com.jsmatos.timesheets.model.VisibilityChangedHandler;
 import com.jsmatos.timesheets.model.*;
-import com.jsmatos.timesheets.storage.Repository;
+import com.jsmatos.timesheets.storage.StatusRepository;
+import com.jsmatos.timesheets.storage.EntryRepository;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class App implements InteractionAPI {
-    private List<LogEntryCreatedHandler> logEntryCreatedHandlers = new ArrayList<>();
     private final List<VisibilityChangedHandler> visibilityChangedHandlers = new ArrayList<>();
-    private final Repository repository;
+    private final EntryRepository entryRepository;
     private final LogPersist logPersist;
+    private List<LogEntryCreatedHandler> logEntryCreatedHandlers = new ArrayList<>();
+    private volatile boolean running = true;
 
     public App() {
-        this.repository = new Repository();
-        this.logPersist = new LogPersist(repository);
+        this.entryRepository = new EntryRepository();
+        this.logPersist = new LogPersist(entryRepository);
+    }
+
+    public static void main(String[] args) {
+        App app = new App();
+        app.init();
     }
 
     @Override
-    public List<LogEntry> getLogEntries(String filter) {
-        return this.repository.findBy(filter);
+    public List<LogEntry> getLogEntries(String filter, int lastN) {
+        return this.entryRepository.findByFilter(filter, lastN);
     }
 
     @Override
@@ -40,6 +49,7 @@ public class App implements InteractionAPI {
 
     @Override
     public RegistrationHandler registerLogEntryCreatedHandler(LogEntryCreatedHandler handler) {
+        System.out.println("App.registerLogEntryCreatedHandler");
         logEntryCreatedHandlers.add(handler);
         return () -> logEntryCreatedHandlers.remove(handler);
     }
@@ -51,26 +61,91 @@ public class App implements InteractionAPI {
         return () -> visibilityChangedHandlers.remove(handler);
     }
 
-    public static void main(String[] args) {
-        App app = new App();
-        app.init();
-        Screen.startInstance(app);
-
-
+    private void init() {
+        StatusRepository statusRepository = new StatusRepository();
+        Status status = statusRepository.getStatus();
+        if (status.isRunning()) {
+            Optional<Integer> port = status.getPort();
+            if (port.isPresent()) {
+                sendShowUpCommand(port.get());
+            } else {
+                Alert.warn("Timeshts", "Couldn't connect to possible running instance, no port found! Please check.");
+            }
+        } else {
+            regularInit();
+            startCommandServer(statusRepository);
+        }
     }
 
-    private void init() {
+    private void sendShowUpCommand(int portNumber) {
+        try (
+                Socket echoSocket = new Socket("localhost", portNumber);
+                PrintWriter out = new PrintWriter(echoSocket.getOutputStream(), true);
+        ) {
+            out.println("show");
+        } catch (IOException e) {
+            Alert.error("Timeshts", String.format("Unable to send command to running application on port %s: %s", portNumber, e.getMessage()));
+            e.printStackTrace();
+        }
+    }
+
+    private void regularInit() {
+        Screen.startInstance(this);
         logEntryCreatedHandlers.add(logPersist);
         Timer timer = new Timer(false);
         long delay = 0;
-        long period = TimeUnit.SECONDS.toMillis(30);
+        long period = TimeUnit.MINUTES.toMillis(30);
         TimerTask task = new TimerTask() {
             @Override
             public void run() {
-                visibilityChangedHandlers.forEach(h -> h.onVisibilityChanged(true));
+                makeVisible();
             }
         };
         timer.schedule(task, delay, period);
     }
 
+    private void makeVisible() {
+        visibilityChangedHandlers.forEach(h -> h.onVisibilityChanged(true));
+    }
+
+    private void startCommandServer(StatusRepository pid) {
+        Runnable r = () -> {
+            int portNumber = Double.valueOf(Math.random() * 4096 + 1024).intValue();
+            try (ServerSocket serverSocket = new ServerSocket(portNumber)) {
+                System.out.println(String.format("Listening for commands on port %d", portNumber));
+                pid.setStatus(portNumber);
+                while (running) {
+                    handleClient(serverSocket);
+                }
+            } catch (IOException e) {
+                Alert.error("Timeshts", String.format("Unable to start command server: %s", e.getMessage()));
+                e.printStackTrace();
+            }
+        };
+        new Thread(r).start();
+    }
+
+    private void handleClient(ServerSocket serverSocket) {
+        try (
+                Socket clientSocket = serverSocket.accept();
+                PrintWriter out =
+                        new PrintWriter(clientSocket.getOutputStream(), true);
+                BufferedReader in = new BufferedReader(
+                        new InputStreamReader(clientSocket.getInputStream()))) {
+
+            final String command = in.readLine();
+            if ("show".equals(command)) {
+                makeVisible();
+                out.println("ok");
+            } else {
+                String msg = String.format("Unknown command: %s", command);
+                System.out.println(msg);
+                out.println(msg);
+            }
+
+        } catch (IOException e) {
+            Alert.warn("Timeshts", String.format("Error handling command: %s", e.getMessage()));
+            e.printStackTrace();
+        }
+    }
 }

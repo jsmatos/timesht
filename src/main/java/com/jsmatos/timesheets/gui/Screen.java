@@ -79,6 +79,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
         add(panel);
         registrationHandlers.add(this.interactionAPI.registerLogEntryCreatedHandler(this));
         registrationHandlers.add(this.interactionAPI.registerVisibilityChangedHandler(this));
+        pack();
     }
 
     private JPanel getCurrentWorkPanel() {
@@ -181,7 +182,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
 
     private void updatePreviousWork() {
         EventQueue.invokeLater(() -> {
-            List<LogEntry> filteredLogs = interactionAPI.getLogEntries(filterPreviousWorkElement.getText());
+            List<LogEntry> filteredLogs = interactionAPI.getLogEntries(filterPreviousWorkElement.getText(), 15);
             LogEntry[] listData = filteredLogs.toArray(new LogEntry[0]);
             previousWorkListElement.setListData(listData);
         });
