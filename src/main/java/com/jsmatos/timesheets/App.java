@@ -34,8 +34,8 @@ public class App implements InteractionAPI {
     }
 
     @Override
-    public List<LogEntry> getLogEntries(String filter, int lastN) {
-        return this.entryRepository.findByFilter(filter, lastN);
+    public List<LogEntry> getLogEntries(String filter, boolean groupByTask, int lastN) {
+        return this.entryRepository.findByFilter(filter, groupByTask, lastN);
     }
 
     @Override

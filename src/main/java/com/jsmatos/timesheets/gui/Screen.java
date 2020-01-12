@@ -25,32 +25,46 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
     private final InteractionAPI interactionAPI;
     private final List<RegistrationHandler> registrationHandlers = new ArrayList<>();
 
-    private Screen(InteractionAPI interactionAPI, java.awt.Frame parent, boolean modal) {
-        super(parent, modal);
+    private Screen(InteractionAPI interactionAPI) {
+        super((JFrame) null, true);
         this.interactionAPI = interactionAPI;
         init();
     }
 
-    public static void startInstance(InteractionAPI interactionAPI) {
-        java.awt.EventQueue.invokeLater(() -> {
-            JFrame frame = new JFrame();
-            frame.setType(Type.NORMAL);
-            frame.setAlwaysOnTop(true);
-            frame.setUndecorated(true);
-            Screen dialog = new Screen(interactionAPI, frame, true);
-            dialog.setSize(new Dimension(700, 200));
-            dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-                @Override
-                public void windowClosing(java.awt.event.WindowEvent e) {
-                    interactionAPI.publish(new CloseEvent());
-                }
-            });
-            dialog.setTitle("Timeshiit");
-            dialog.setVisible(true);
+    public static Screen startInstance(InteractionAPI interactionAPI) {
+        Screen dialog = new Screen(interactionAPI);
+        dialog.setAlwaysOnTop(true);
+        dialog.setSize(new Dimension(700, 200));
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                interactionAPI.publish(new CloseEvent());
+            }
         });
+        dialog.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                Dimension size = e.getComponent().getSize();
+                System.out.println("Screen.componentResized: " + size);
+            }
+
+            @Override
+            public void componentMoved(ComponentEvent e) {
+                Point locationOnScreen = e.getComponent().getLocationOnScreen();
+                System.out.println("Screen.componentMoved: " + locationOnScreen);
+            }
+        });
+        dialog.setTitle("Timeshiit");
+        java.awt.EventQueue.invokeLater(() -> {
+            dialog.pack();
+            dialog.setVisible(true);
+            dialog.pack();
+        });
+        return dialog;
     }
 
     private void init() {
+        setLayout(new BorderLayout());
         logButton = new JButton();
         JLabel durationLabel = new JLabel();
         currentWorkTextElement = new JTextArea();
@@ -68,6 +82,11 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
             @Override
             public void keyReleased(KeyEvent e) {
                 handleTextChanges();
+                if (e.getKeyCode() == KeyEvent.VK_ENTER && e.isControlDown()) {
+                    if (StringUtils.isNotBlank(currentWorkTextElement.getText())){
+                        logWork();
+                    }
+                }
             }
         });
         HorizontalPanel buttonsPanel = getButtonsPanel();
@@ -85,10 +104,12 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
     private JPanel getCurrentWorkPanel() {
         JPanel currentWorkPanel = new JPanel();
         currentWorkPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("What have you been doing since %s ago?"));
-        currentWorkPanel.add(currentWorkTextElement);
+        currentWorkPanel.setLayout(new BorderLayout());
+        JScrollPane scrollPane = new JScrollPane();
+        scrollPane.setViewportView(currentWorkTextElement);
+        currentWorkPanel.add(scrollPane);
         currentWorkTextElement.setWrapStyleWord(true);
-        currentWorkTextElement.setColumns(50);
-        currentWorkTextElement.setRows(2);
+        currentWorkTextElement.setAutoscrolls(true);
         return currentWorkPanel;
     }
 
@@ -102,8 +123,12 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
         VerticalPanel historyPanel = new VerticalPanel();
         historyPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("What you did previously [%s]"));
         historyPanel.add(getSearchPanel());
-        historyPanel.add(previousWorkListElement);
-//        previousWorkListElement.setCellRenderer(new DefaultListCellRenderer());
+        JScrollPane scrollPane = new JScrollPane();
+        scrollPane.setViewportView(previousWorkListElement);
+
+        historyPanel.add(scrollPane);
+        previousWorkListElement.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+        previousWorkListElement.setAutoscrolls(true);
         previousWorkListElement.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent evt) {
                 if (evt.getClickCount() == 2 && evt.getButton() == MouseEvent.BUTTON1) {
@@ -130,8 +155,20 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
         searchLabel.setText("Search:");
         searchFields.add(searchLabel);
         searchFields.add(filterPreviousWorkElement);
-        filterPreviousWorkElement.setMaximumSize(new Dimension(Integer.MAX_VALUE,17));
-        filterPreviousWorkElement.setColumns(50);
+        filterPreviousWorkElement.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    updatePreviousWork();
+                }
+            }
+        });
+        JButton searchButton = new JButton("search");
+        searchButton.addActionListener(e -> {
+            updatePreviousWork();
+        });
+        searchFields.add(searchButton);
+        filterPreviousWorkElement.setMaximumSize(new Dimension(Integer.MAX_VALUE, 17));
         return searchFields;
     }
 
@@ -182,7 +219,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
 
     private void updatePreviousWork() {
         EventQueue.invokeLater(() -> {
-            List<LogEntry> filteredLogs = interactionAPI.getLogEntries(filterPreviousWorkElement.getText(), 15);
+            List<LogEntry> filteredLogs = interactionAPI.getLogEntries(filterPreviousWorkElement.getText(), true, 5);
             LogEntry[] listData = filteredLogs.toArray(new LogEntry[0]);
             previousWorkListElement.setListData(listData);
         });

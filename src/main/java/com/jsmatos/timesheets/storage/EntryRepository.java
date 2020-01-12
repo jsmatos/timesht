@@ -15,6 +15,7 @@ import java.time.Month;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,7 +34,7 @@ public class EntryRepository {
         return logEntry;
     }
 
-    public List<LogEntry> findByFilter(String filter, int lastN) {
+    public List<LogEntry> findByFilter(String filter, boolean groupByTask, int lastN) {
         System.out.println(String.format("Repository.findBy (%s)", filter));
         LocalDate now = LocalDate.now();
         LocalDate previousMonth = now.minus(1, ChronoUnit.MONTHS);
@@ -43,15 +44,43 @@ public class EntryRepository {
                 lastNDaysFilesFromFolder(currentMonthFolder, now, 7).stream(),
                 lastNDaysFilesFromFolder(previousMonthFolder, now, 7).stream()
         );
-        List<LogEntry> collect = filenamesStream
+
+        final List<LogEntry> result;
+        final Stream<LogEntry> matchingEntries = filenamesStream
                 .map(this::fromFile)
                 .flatMap(Collection::stream)
-                .filter(le -> StringUtils.containsIgnoreCase(le.getWhat(), filter))
-                .sorted(Comparator.comparing(LogEntry::getWhen))
-                .limit(lastN)
-                .collect(Collectors.toList());
-        System.out.println(String.format("Repository.findBy (%s) returning %d results", filter, collect.size()));
-        return collect;
+                .filter(le -> StringUtils.containsIgnoreCase(le.getWhat(), filter));
+        if (groupByTask) {
+            Map<String, List<LogEntry>> groupedByTask = matchingEntries
+                    .collect(Collectors.groupingBy(LogEntry::getWhat));
+            result = groupedByTask.values().stream().map(this::getLatest)
+                    .sorted(Comparator.comparing(LogEntry::getWhen))
+                    .collect(lastN(lastN));
+        }else {
+            result = matchingEntries
+                    .sorted(Comparator.comparing(LogEntry::getWhen))
+                    .collect(lastN(lastN));
+        }
+        System.out.println(String.format("Repository.findBy (%s) returning %d results", filter, result.size()));
+        return result;
+    }
+
+    private LogEntry getLatest(List<LogEntry> list) {
+        list.sort(Comparator.comparing(LogEntry::getWhen).reversed());
+        return list.iterator().next();
+    }
+
+    public static <T> Collector<T, ?, List<T>> lastN(int n) {
+        return Collector.<T, Deque<T>, List<T>>of(ArrayDeque::new, (acc, t) -> {
+            if (acc.size() == n)
+                acc.pollFirst();
+            acc.add(t);
+        }, (acc1, acc2) -> {
+            while (acc2.size() < n && !acc1.isEmpty()) {
+                acc2.addFirst(acc1.pollLast());
+            }
+            return acc2;
+        }, ArrayList::new);
     }
 
     private List<File> lastNDaysFilesFromFolder(File folder, LocalDate startDate, int untilDaysBefore) {
