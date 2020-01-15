@@ -1,17 +1,11 @@
 package com.jsmatos.timesheets.gui;
 
-import com.jsmatos.timesheets.model.RegistrationHandler;
-import com.jsmatos.timesheets.model.VisibilityChangedHandler;
 import com.jsmatos.timesheets.model.*;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.datatransfer.Clipboard;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.*;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -119,7 +113,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
         return buttonsPanel;
     }
 
-    JPanel getHistoryPanel() {
+    private JPanel getHistoryPanel() {
         VerticalPanel historyPanel = new VerticalPanel();
         historyPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("What you did previously [%s]"));
         historyPanel.add(getSearchPanel());
@@ -134,7 +128,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
                 if (evt.getClickCount() == 2 && evt.getButton() == MouseEvent.BUTTON1) {
                     if (evt.getSource() == previousWorkListElement) {
                         int index = previousWorkListElement.locationToIndex(evt.getPoint());
-                        handlePreviousWorkSelected(index);
+                        handlePreviousWorkSelected();
                     }
                 }
             }
@@ -142,7 +136,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
         return historyPanel;
     }
 
-    void handlePreviousWorkSelected(int index) {
+    void handlePreviousWorkSelected() {
         LogEntry logEntry = previousWorkListElement.getSelectedValue();
         if (logEntry != null) {
             this.currentWorkTextElement.setText(logEntry.getWhat());
@@ -150,7 +144,7 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
         }
     }
 
-    JPanel getSearchPanel() {
+    private JPanel getSearchPanel() {
         HorizontalPanel searchFields = new HorizontalPanel();
         searchLabel.setText("Search:");
         searchFields.add(searchLabel);
@@ -223,22 +217,6 @@ public class Screen extends JDialog implements LogEntryCreatedHandler, Visibilit
             LogEntry[] listData = filteredLogs.toArray(new LogEntry[0]);
             previousWorkListElement.setListData(listData);
         });
-    }
-
-    private void handleClipboard() {
-        Toolkit aToolkit = Toolkit.getDefaultToolkit();
-        aToolkit.beep();
-        Clipboard systemClipboard = aToolkit.getSystemClipboard();
-        DataFlavor[] availableDataFlavors = systemClipboard.getAvailableDataFlavors();
-        for (DataFlavor dataFlavor : availableDataFlavors) {
-            try {
-                Object data = systemClipboard.getData(dataFlavor);
-                System.out.println(dataFlavor.toString() + " ---> " + data);
-                System.out.println();
-            } catch (UnsupportedFlavorException | IOException e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     @Override

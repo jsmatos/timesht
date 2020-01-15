@@ -20,8 +20,10 @@ public class App implements InteractionAPI {
     private final List<VisibilityChangedHandler> visibilityChangedHandlers = new ArrayList<>();
     private final EntryRepository entryRepository;
     private final LogPersist logPersist;
+    private final Timer timer = new Timer(false);
     private List<LogEntryCreatedHandler> logEntryCreatedHandlers = new ArrayList<>();
     private volatile boolean running = true;
+    private TimerTask makeVisibleTask;
 
     public App() {
         this.entryRepository = new EntryRepository();
@@ -40,11 +42,13 @@ public class App implements InteractionAPI {
 
     @Override
     public void publish(LogEntry logEntry) {
+        scheduleVisibility(30);
         logEntryCreatedHandlers.forEach(le -> le.onLogEntryCreated(logEntry));
     }
 
     @Override
     public void publish(CloseEvent closeEvent) {
+        scheduleVisibility(10);
     }
 
     @Override
@@ -92,16 +96,26 @@ public class App implements InteractionAPI {
     private void regularInit() {
         Screen.startInstance(this);
         logEntryCreatedHandlers.add(logPersist);
-        Timer timer = new Timer(false);
-        long delay = 0;
-        long period = TimeUnit.MINUTES.toMillis(30);
-        TimerTask task = new TimerTask() {
+        scheduleVisibility(0, 30);
+    }
+
+    private void scheduleVisibility(int after) {
+        scheduleVisibility(after,30);
+    }
+    private void scheduleVisibility(int after, int minutes) {
+        if(makeVisibleTask!=null){
+            makeVisibleTask.cancel();
+        }
+        timer.purge();
+        makeVisibleTask = new TimerTask() {
             @Override
             public void run() {
                 makeVisible();
             }
         };
-        timer.schedule(task, delay, period);
+        long period = TimeUnit.MINUTES.toMillis(minutes);
+        long delay = TimeUnit.MINUTES.toMillis(after);
+        timer.schedule(makeVisibleTask, delay, period);
     }
 
     private void makeVisible() {
