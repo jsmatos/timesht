@@ -27,7 +27,11 @@ public class EntryRepository {
 
         try (FileOutputStream fos = new FileOutputStream(getTodayFile(), true);
              PrintStream ps = new PrintStream(fos)) {
-            ps.println(String.format("[%s] %s", taskTimeOfDayFormat.format(logEntry.getWhen()), logEntry.getWhat().replaceAll("\n", "%n")));
+            String text = String.format("[%s] %s", taskTimeOfDayFormat.format(logEntry.getWhen()), logEntry.getWhat().replaceAll("\n", "%n"));
+            int length = text.length();
+            ps.print(length);
+            ps.print(" ");
+            ps.println(text);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -47,7 +51,7 @@ public class EntryRepository {
 
         final List<LogEntry> result;
         final Stream<LogEntry> matchingEntries = filenamesStream
-                .map(this::fromFile)
+                .map(this::entriesFromFile)
                 .flatMap(Collection::stream)
                 .filter(le -> StringUtils.containsIgnoreCase(le.getWhat(), filter));
         if (groupByTask) {
@@ -122,7 +126,7 @@ public class EntryRepository {
         return path.toFile();
     }
 
-    private Collection<LogEntry> fromFile(File file) {
+    private List<LogEntry> entriesFromFile(File file) {
         Path path = file.toPath();
         try {
             return Files.lines(path)
@@ -133,6 +137,12 @@ public class EntryRepository {
             e.printStackTrace();
             return Collections.emptyList();
         }
+    }
+
+    public static void main(String[] args) throws IOException {
+        FileInputStream f = new FileInputStream("/home/jorge/logs/timesheet/2020/JANUARY/10");
+        f.close();
+        
     }
 
     private LogEntry fromLine(String line, String fileName) {

@@ -4,8 +4,8 @@ import com.jsmatos.timesheets.gui.Alert;
 import com.jsmatos.timesheets.gui.Screen;
 import com.jsmatos.timesheets.handlers.LogPersist;
 import com.jsmatos.timesheets.model.*;
-import com.jsmatos.timesheets.storage.StatusRepository;
 import com.jsmatos.timesheets.storage.EntryRepository;
+import com.jsmatos.timesheets.storage.StatusRepository;
 
 import java.io.BufferedReader;
 import java.io.IOException;
